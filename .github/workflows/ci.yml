@@ -1,27 +1,54 @@
-- name: Install deps
-  run: |
-    sudo apt-get update
-    sudo apt-get install -y cmake gcc libcriterion-dev python3-pip
-    python3 -m pip install --upgrade gcovr
+name: C CI
 
-- name: Configure (Debug with coverage)
-  run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+on:
+  push:
+  pull_request:
 
-- name: Build
-  run: cmake --build build --config Debug -- -j2
+jobs:
+  build-test-cover:
+    runs-on: ubuntu-latest
 
-- name: Run tests
-  run: ctest --test-dir build --output-on-failure
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-- name: Coverage (gcovr)
-  run: |
-    gcovr -r . build \
-      --exclude 'tests/.*' \
-      --html --html-details -o coverage.html
-    mkdir -p coverage-report && mv coverage.html coverage-report/index.html
+      # 早期検出: RTF混入をガード（あると原因特定が速い）
+      - name: Guard: fail if any source is RTF
+        run: |
+          if grep -RIl '^{\\rtf1' include src tests 2>/dev/null; then
+            echo "ERROR: RTF file detected. Save sources as plain text (*.c/*.h) in UTF-8."
+            exit 1
+          fi
 
-- name: Upload coverage report (artifact)
-  uses: actions/upload-artifact@v4
-  with:
-    name: coverage-report
-    path: coverage-report
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake gcc libcriterion-dev lcov
+
+      - name: Configure (Debug with coverage)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --config Debug -- -j2
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      # lcov で tests 配下を収集対象から外し、不要パスも除外
+      - name: Capture coverage
+        run: |
+          # tests/*.gcda を最初から対象外にして収集（mismatch対策の肝）
+          lcov --directory build --capture --output-file coverage.info \
+               --rc geninfo_exclude='*/tests/*'
+
+          # さらに不要パスを除去
+          lcov --remove coverage.info '/usr/*' '*/tests/*' --output-file coverage.info
+
+          # HTML レポート生成
+          genhtml coverage.info --output-directory coverage-report
+
+      - name: Upload coverage report (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-report
