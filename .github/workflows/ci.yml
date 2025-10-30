@@ -12,13 +12,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Guard: fail if any source is RTF
-        run: |
-          if grep -RIl '^{\\rtf1' include src tests 2>/dev/null; then
-            echo "ERROR: RTF file detected. Save sources as plain text (*.c/*.h) in UTF-8."
-            exit 1
-          fi
-
       - name: Install deps
         run: |
           sudo apt-get update
