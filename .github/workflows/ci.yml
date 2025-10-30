@@ -31,7 +31,9 @@ jobs:
           # tests 配下は geninfo の段階で除外。外部ライブラリも収集しない。
           lcov --directory build --capture --output-file coverage.info \
                --rc geninfo_exclude='*/tests/*' \
-               --no-external
+               --no-external \
+               --base-directory "${{ github.workspace }}"
+
           genhtml coverage.info --output-directory coverage-report
 
       - name: Upload coverage report (artifact)
